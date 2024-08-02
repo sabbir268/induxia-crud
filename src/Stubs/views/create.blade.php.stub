@@ -1,0 +1,41 @@
+@extends('layouts.app')
+@section('content')
+<input type="hidden" id="page-module" value="{{ $name }}">
+    <div class="page-wrapper">
+        <div class="container-fluid">
+            @include('layouts.breadcrumb', [
+                'title' => 'Create {{ $name }}',
+                'breadcrumbs' => [
+                    (object) [
+                        'name' => 'Home',
+                        'link' => '/',
+                    ],
+                    (object) [
+                        'name' => 'All {{ $name }}',
+                        'link' => route('{{ strtolower($name) }}.index'),
+                    ],
+                    (object) [
+                        'name' => 'Create',
+                        'link' => route('{{ strtolower($name) }}.create'),
+                        'active' => true,
+                    ],
+                ],
+                'showCreateBtn' => true,
+                'createLink' => route('{{ strtolower($name) }}.create'),
+            ])
+
+            <form action="{{ route('{{ strtolower($name) }}.store') }}" method="post" enctype="multipart/form-data">
+                @csrf
+                <div class="card">
+                    <div class="card-body">
+                        @include('pages.{{ strtolower($name) }}._form', ['data' => null])
+                    </div>
+                </div>
+                @include('misc.form-submit-button', [
+                    'buttonSaveText' => 'Save',
+                    'delete' => true,
+                ])
+            </form>
+        </div>
+    </div>
+@endsection

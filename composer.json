@@ -1,0 +1,32 @@
+{
+    "name": "sabbir268/induxia-crud",
+    "description": "This a curd for induxia template",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Sabbir268\\InduxiaCurd\\": "src/"
+        }
+    },
+    "authors": [{
+        "name": "sabbir268",
+        "email": "sabbir.hossain2668@gmail.com"
+    }],
+    "minimum-stability": "dev",
+    "require": {
+        "php": "^7.3|^8.0",
+        "illuminate/support": "^8.0|^9.0|^10.0"
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Sabbir268\\InduxiaCurd\\InduxiaCurdServiceProvider"
+            ],
+            "aliases": {
+                "InduxiaCurd": "Sabbir268\\InduxiaCurd\\Facades\\InduxiaCurd"
+            }
+        }
+    },
+    "require-dev": {
+        "symfony/yaml": "7.2.x-dev"
+    }
+}

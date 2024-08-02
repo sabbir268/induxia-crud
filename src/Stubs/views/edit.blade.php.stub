@@ -1,0 +1,43 @@
+@extends('layouts.app')
+@section('content')
+<input type="hidden" id="page-module" value="{{ $name }}">
+    <div class="page-wrapper">
+        <div class="container-fluid">
+            @include('layouts.breadcrumb', [
+                'title' => 'Edit {{ $name }}',
+                'breadcrumbs' => [
+                    (object) [
+                        'name' => 'Home',
+                        'link' => '/',
+                    ],
+                    (object) [
+                        'name' => 'All {{ $name }}',
+                        'link' => route('{{ strtolower($name) }}.index'),
+                    ],
+                    (object) [
+                        'name' => 'Edit',
+                        'link' => route('{{ strtolower($name) }}.edit', ${{ strtolower($name) }}->id),
+                        'active' => true,
+                    ],
+                ],
+                'showCreateBtn' => true,
+                'createLink' => route('{{ strtolower($name) }}.create'),
+            ])
+
+            <form action="{{ route('{{ strtolower($name) }}.update', ${{ strtolower($name) }}->id) }}" method="post" enctype="multipart/form-data">
+                @csrf
+                @method('PUT')
+                <div class="card">
+                    <div class="card-body">
+                        @include('pages.{{ strtolower($name) }}._form', ['data' => ${{ strtolower($name) }}])
+                    </div>
+                </div>
+                @include('misc.form-submit-button', [
+                    'buttonSaveText' => __('pages.Update'),
+                    'delete' => true,
+                    'data' => ${{ strtolower($name) }},
+                ])
+            </form>
+        </div>
+    </div>
+@endsection
