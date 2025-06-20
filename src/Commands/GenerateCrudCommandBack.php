@@ -7,7 +7,7 @@ use Illuminate\Console\Command;
 use Symfony\Component\Yaml\Yaml;
 use Illuminate\Support\Facades\Artisan;
 
-class GenerateCrudCommand extends Command
+class GenerateCrudCommandBack extends Command
 {
     protected $signature = 'make:crud {name} {--yml= : Path to the YAML file}';
     protected $description = 'Generate a full CRUD for a resource based on a YAML file';
@@ -24,30 +24,23 @@ class GenerateCrudCommand extends Command
 
         $config = Yaml::parseFile($ymlPath);
 
-        $multilangColumns = collect($config['columns'])->filter(fn($col) => $col['is_multilang'] ?? false);
-
+        // Generate Model and Migration
         $this->generateModel($name, $config);
         $this->generateMigration($name, $config);
 
+        // Generate Controller
+        $this->generateController($name, $config);
 
-
-        if ($multilangColumns->isNotEmpty()) {
-            $this->generateTranslationModelAndMigration($name, $config);
-            $resource = strtolower(Str::snake($name));
-            $this->generateMultilangView($resource, $multilangColumns->toArray());
-            $this->generateRequest($resource, $config);
-            $this->generateController($name, $config, true);
-        }else{
-            $this->generateController($name, $config);
-        }
-
-
-
+        // Generate Views
         $this->generateViews($name, $config);
+
+        // Generate Routes
         $this->generateRoutes($name);
 
         $this->info("CRUD for {$name} generated successfully.");
     }
+
+    // src/Commands/GenerateCrudCommand.php
 
     protected function generateModel($name, $config)
     {
@@ -56,18 +49,20 @@ class GenerateCrudCommand extends Command
 
         $fillable = [];
         $relationships = [];
+
         $fileCasts = [];
-        $translatedAttributes = [];
 
         foreach ($config['columns'] as $column => $details) {
-            if ($column == 'id') continue;
-            if (isset($details['fillable']) && $details['fillable'] == false) continue;
-
-            if (!isset($details['is_multilang']) || !$details['is_multilang']) {
-                $fillable[] = "'{$column}'";
-            } else {
-                $translatedAttributes[] = "'{$column}'";
+            // ignore id
+            if ($column == 'id') {
+                continue;
             }
+
+            if (isset($details['fillable']) && $details['fillable'] == false) {
+                continue;
+            }
+            $fillable[] = "'{$column}'";
+
 
             if ($details['input_type'] == 'file') {
                 $fileCasts[] = "'{$column}' => 'Filecast'";
@@ -92,6 +87,7 @@ class GenerateCrudCommand extends Command
     }
 PHP;
                         break;
+
                     case 'hasMany':
                         $relationships[] = <<<PHP
     public function {$methodName}()
@@ -100,6 +96,7 @@ PHP;
     }
 PHP;
                         break;
+
                     case 'belongsTo':
                         $relationships[] = <<<PHP
     public function {$methodName}()
@@ -108,6 +105,7 @@ PHP;
     }
 PHP;
                         break;
+
                     case 'belongsToMany':
                         $pivotTable = $relation['pivot_table'];
                         $relationships[] = <<<PHP
@@ -117,179 +115,25 @@ PHP;
     }
 PHP;
                         break;
+
+                        // Add more relationship types as needed
                 }
             }
         }
 
         $fillableString = implode(', ', $fillable);
-        $translatedString = implode(', ', $translatedAttributes);
         $relationshipsString = implode("\n\n", $relationships);
 
-        $useTraits = "use HasFactory, SoftDeletes";
-        $useTraits .= $translatedAttributes ? ", Translatable, SaveTranslations, ModelHelper, SaveSlugTranslations" : "";
+        $modelStub = file_get_contents(__DIR__ . '/../Stubs/model.stub');
+        $modelStub = str_replace(
+            ['{{ modelName }}', '{{ fillable }}', '{{ relationships }}', '{{ fileCasts }}'],
+            [$modelName, $fillableString, $relationshipsString, implode(', ', $fileCasts)],
+            $modelStub
+        );
 
-        $implements = $translatedAttributes ? " implements TranslatableContract" : "";
-
-        $traitsUse = $translatedAttributes ? "use HasFactory, SoftDeletes, Translatable, SaveTranslations, ModelHelper, SaveSlugTranslations;" : "use HasFactory, SoftDeletes;";
-
-        $namespaceUses = [
-            "use Illuminate\\Database\\Eloquent\\Model;",
-            "use Illuminate\\Database\\Eloquent\\SoftDeletes;",
-            "use Illuminate\\Database\\Eloquent\\Factories\\HasFactory;"
-        ];
-
-        if ($translatedAttributes) {
-            $namespaceUses[] = "use App\\Helpers\\Traits\\ModelHelper;";
-            $namespaceUses[] = "use App\\Helpers\\Traits\\SaveSlugTranslations;";
-            $namespaceUses[] = "use App\\Induxia\\Traits\\SaveTranslations;";
-            $namespaceUses[] = "use Astrotomic\\Translatable\\Translatable;";
-            $namespaceUses[] = "use Astrotomic\\Translatable\\Contracts\\Translatable as TranslatableContract;";
-        }
-
-        $namespaceUsesString = implode("\n", $namespaceUses);
-        $fileCastsString = implode(",\n        ", $fileCasts);
-
-        $translatedAttributesString = $translatedAttributes ? "\n    protected \$translatedAttributes = [{$translatedString}];" : "";
-
-        $modelContent = <<<PHP
-<?php
-
-namespace App\Models;
-
-{$namespaceUsesString}
-
-class {$modelName} extends Model{$implements}
-{
-    {$traitsUse}
-
-    protected \$fillable = [{$fillableString}];
-
-    protected \$casts = [
-        {$fileCastsString}
-    ];
-
-    {$translatedAttributesString}
-
-    {$relationshipsString}
-}
-PHP;
-
-        file_put_contents($modelPath, $modelContent);
+        file_put_contents($modelPath, $modelStub);
 
         $this->info("Model created successfully at: {$modelPath}");
-    }
-
-     protected function generateRequest($name, $config)
-    {
-        $className = ucfirst($name) . 'Request';
-        $filePath = app_path("Http/Requests/{$className}.php");
-
-        $rules = [];
-        foreach ($config['columns'] as $column => $details) {
-            $rule = $details['validation'] ?? 'nullable';
-            if (!empty($details['is_multilang'])) {
-                $rules[] = "'%{$column}%' => '{$rule}'";
-            } else {
-                $rules[] = "'{$column}' => '{$rule}'";
-            }
-        }
-
-        $rulesString = implode(",\n            ", $rules);
-
-        $template = <<<PHP
-<?php
-
-namespace App\Http\Requests;
-
-use Illuminate\Foundation\Http\FormRequest;
-use Astrotomic\Translatable\Validation\RuleFactory;
-
-class {$className} extends FormRequest
-{
-    public function authorize(): bool
-    {
-        return true;
-    }
-
-    public function rules(): array
-    {
-        \$rules = [
-            {$rulesString}
-        ];
-
-        return RuleFactory::make(\$rules);
-    }
-}
-PHP;
-
-
-        file_put_contents($filePath, $template);
-        $this->info("Request file created: {$filePath}");
-    }
-
-
-
-    protected function generateTranslationModelAndMigration($name, $config)
-    {
-        $translationClass = ucfirst($name) . 'Translation';
-        $translationTable = strtolower($name) . '_translations';
-        $modelPath = app_path("Models/{$translationClass}.php");
-        $migrationPath = database_path('migrations') . '/' . date('Y_m_d_His') . "_create_{$translationTable}_table.php";
-
-        $translatableColumns = array_filter($config['columns'], fn($col) => isset($col['is_multilang']) && $col['is_multilang']);
-
-        $fillable = implode(",\n        ", array_map(fn($field) => "'" . $field . "'", array_keys($translatableColumns)));
-        $fillable = "'locale',\n        {$fillable}";
-
-        $modelContent = <<<PHP
-<?php
-
-namespace App\Models;
-
-use Illuminate\Database\Eloquent\Model;
-
-class {$translationClass} extends Model
-{
-    protected \$fillable = [
-        {$fillable}
-    ];
-}
-PHP;
-
-        file_put_contents($modelPath, $modelContent);
-        $this->info("Translation model created: {$modelPath}");
-
-        $columns = "\$table->id();\n            \$table->foreignId('" . strtolower($name) . "_id')->constrained('" . Str::plural(strtolower($name)) . "')->onDelete('cascade');\n            \$table->string('locale')->index();\n";
-        foreach ($translatableColumns as $col => $info) {
-            $columns .= "            \$table->string('{$col}')->nullable();\n";
-        }
-        $columns .= "            \$table->timestamps();\n            \$table->softDeletes();";
-
-        $migrationContent = <<<PHP
-<?php
-
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
-
-return new class extends Migration
-{
-    public function up(): void
-    {
-        Schema::create('{$translationTable}', function (Blueprint \$table) {
-            {$columns}
-        });
-    }
-
-    public function down(): void
-    {
-        Schema::dropIfExists('{$translationTable}');
-    }
-};
-PHP;
-
-        file_put_contents($migrationPath, $migrationContent);
-        $this->info("Translation migration created: {$migrationPath}");
     }
 
 
@@ -319,7 +163,7 @@ PHP;
         $this->info("Migration created successfully at: {$migrationPath}");
     }
 
-    protected function generateController($name, $config, $multilang = false)
+    protected function generateController($name, $config)
     {
         $controllerName = ucfirst($name) . 'Controller';
         $controllerPath = app_path("Http/Controllers/{$controllerName}.php");
@@ -367,11 +211,7 @@ PHP;
         $tableColumnsString = implode(",\n            ", $tableColumns);
 
 
-        if($multilang){
-            $controllerStub = file_get_contents(__DIR__ . '/../Stubs/translateablecontroller.stub');
-        }else{
-            $controllerStub = file_get_contents(__DIR__ . '/../Stubs/controller.stub');
-        }
+        $controllerStub = file_get_contents(__DIR__ . '/../Stubs/controller.stub');
         $controllerStub = str_replace(
             [
                 '{{ controllerName }}',
@@ -401,6 +241,11 @@ PHP;
         $this->info("Controller created successfully at: {$controllerPath}");
     }
 
+
+
+
+
+
     protected function generateRoutes($name)
     {
         $path = 'App\Http\Controllers\\' . ucfirst($name) . 'Controller::class';
@@ -410,11 +255,12 @@ PHP;
     }
 
 
+
     protected function generateViews($name, $config)
     {
         $views = ['create', 'edit', 'index'];
         $namePath = strtolower(Str::snake($name));
-
+        // check if pages directory exists
         if (!file_exists(resource_path('views/pages'))) {
             mkdir(resource_path('views/pages'), 0755, true);
         }
@@ -424,24 +270,22 @@ PHP;
             mkdir($path, 0755, true);
         }
 
-        $multilangColumns = collect($config['columns'])->filter(fn($col) => $col['is_multilang'] ?? false);
-        $regularColumns = collect($config['columns'])->reject(fn($col) => $col['is_multilang'] ?? false)->toArray();
-
         // Generate _form.blade.php dynamically
-        $formStub = '';
-        if ($multilangColumns->isNotEmpty()) {
-            $formStub .= "@include('pages.{$namePath}.data')\n";
-        }
-        $formStub .= $this->generateFormStub($name, ['columns' => $regularColumns]);
+        $formStub = $this->generateFormStub($name, $config);
         file_put_contents("{$path}/_form.blade.php", $formStub);
 
+        // Generate create, edit, and index views
         foreach ($views as $view) {
             $viewContent = file_get_contents(__DIR__ . "/../Stubs/views/{$view}.blade.php.stub");
             $viewContent = str_replace('{{ $name }}', ucfirst($name), $viewContent);
+            // replace {{ strtolower($name) }}
             $viewContent = str_replace('{{ strtolower($name) }}', $namePath, $viewContent);
+
             file_put_contents("{$path}/{$view}.blade.php", $viewContent);
         }
     }
+
+
 
     protected function generateFormStub($name, $config)
     {
@@ -603,7 +447,7 @@ HTML;
         $content .= "        <div class=\"row mt-3\">\n";
 
         foreach ($columns as $field => $info) {
-            $label = ucfirst(str_replace('_', ' ', $field)) . ' ({{ \$k }})';
+            $label = ucfirst(str_replace('_', ' ', $field)) . ' ({{ $k }})';
             $fieldName = $field . ":{{ \$k }}";
             $inputClass = "{{ \$errors->has('{$field}') ? 'is-invalid' : '' }}";
             $error = "{!! showErr('{$field}', \$k) !!}";
@@ -612,25 +456,27 @@ HTML;
             switch ($info['input_type']) {
                 case 'textarea':
                     $content .= <<<HTML
-<div class="col-md-6">
-    <div class="form-group">
-        <label for="{$field}">{$label}</label>
-        <textarea class="form-control editor-minimal {$inputClass}" id="{$field}-{{ \$k }}" name="{$fieldName}">{$value}</textarea>
-        {$error}
-    </div>
-</div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label for="{$field}">{$label}</label>
+                    <textarea class="form-control editor-minimal {$inputClass}"
+                              id="{$field}-{{ \$k }}" name="{$fieldName}">{$value}</textarea>
+                    {$error}
+                </div>
+            </div>\n
 HTML;
                     break;
 
                 default:
                     $content .= <<<HTML
-<div class="col-md-6">
-    <div class="form-group">
-        <label for="{$field}">{$label}</label>
-        <input type="text" class="form-control {$inputClass}" id="{$field}-{{ \$k }}" name="{$fieldName}" value="{$value}">
-        {$error}
-    </div>
-</div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label for="{$field}">{$label}</label>
+                    <input type="text" class="form-control {$inputClass}"
+                           id="{$field}-{{ \$k }}" name="{$fieldName}" value="{$value}">
+                    {$error}
+                </div>
+            </div>\n
 HTML;
                     break;
             }
@@ -639,6 +485,5 @@ HTML;
         $content .= "        </div>\n    </div>\n@endforeach\n</div>\n";
 
         file_put_contents("{$path}/data.blade.php", $content);
-        $this->info("Multilang view generated at: {$path}/data.blade.php");
     }
 }

@@ -1,0 +1,149 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\{{ modelName }};
+use Illuminate\Http\Request;
+use App\Http\Requests\{{ modelName }}Request;
+
+class {{ controllerName }} extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     */
+    public function index()
+    {
+        view()->share(['meta' => ['title' => 'All {{ modelNamePlural }}']]);
+        ${{ modelVariablePlural }} = {{ modelName }}::paginate($this->per_page);
+        $table = $this->dataTable(${{ modelVariablePlural }});
+        return view('pages.{{ modelVariablePlural }}.index', compact('table'));
+    }
+
+    /**
+     * Display a listing of the deleted resource.
+     */
+    public function trashed()
+    {
+        view()->share(['meta' => ['title' => 'All Deleted {{ modelNamePlural }}']]);
+        ${{ modelVariablePlural }} = {{ modelName }}::onlyTrashed()->paginate($this->per_page);
+        return view('pages.{{ modelVariablePlural }}.index', compact('{{ modelVariablePlural }}'));
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     */
+    public function create()
+    {
+        view()->share(['meta' => ['title' => 'Create {{ modelName }}']]);
+        return view('pages.{{ modelVariablePlural }}.create');
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store({{ modelName }}Request $request)
+    {
+        $data = $request->all();
+
+        if (${{ modelVariable }} = {{ modelName }}::create($data)) {
+            ${{ modelVariable }}->updateLanguages();
+            return redirect()->route('{{ modelVariable }}.edit', ${{ modelVariable }}->id)->with('success', '{{ modelName }} created successfully');
+        } else {
+            return redirect()->back()->with('error', '{{ modelName }} could not be created');
+        }
+    }
+
+    /**
+     * Display the specified resource.
+     */
+    public function show({{ modelName }} ${{ modelVariable }})
+    {
+        //
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     */
+    public function edit({{ modelName }} ${{ modelVariable }})
+    {
+        view()->share(['meta' => ['title' => 'Edit {{ modelName }}']]);
+        return view('pages.{{ modelVariablePlural }}.edit', compact('{{ modelVariable }}'));
+    }
+
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update({{ modelName }}Request $request, {{ modelName }} ${{ modelVariable }})
+    {
+
+        $data = $request->all();
+
+
+
+        if (${{ modelVariable }}->update($data)) {
+            ${{ modelVariable }}->updateLanguages();
+            return redirect()->route('{{ modelVariable }}.edit', ${{ modelVariable }}->id)->with('success', '{{ modelName }} updated successfully');
+        } else {
+            return redirect()->back()->with('error', '{{ modelName }} could not be updated');
+        }
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy({{ modelName }} ${{ modelVariable }})
+    {
+        $status = false;
+        if (${{ modelVariable }}->delete()) {
+            $status = true;
+        } else {
+            $status = false;
+        }
+        if (request()->ajax()) {
+            return response()->json(['success' => $status]);
+        } else {
+            if ($status) {
+                return redirect()->route('{{ modelVariable }}.index')->with('success', '{{ modelName }} deleted successfully');
+            } else {
+                return redirect()->back()->with('error', '{{ modelName }} could not be deleted');
+            }
+        }
+    }
+
+    public function undoTrashed($id)
+    {
+        ${{ modelVariable }} = {{ modelName }}::onlyTrashed()->find($id);
+        if (${{ modelVariable }}->restore()) {
+            return redirect()->route('{{ modelVariable }}.index')->with('success', '{{ modelName }} restored successfully');
+        } else {
+            return redirect()->back()->with('error', '{{ modelName }} could not be restored');
+        }
+    }
+
+    public function dataTable($data)
+    {
+        $table = \Table::collection($data);
+
+        return $table->columns([
+            {{ tableColumns }},
+            '_actions' => 'Actions',
+        ])
+            {{ tableModifyData }}
+            ->modifyData('_actions', function ($record) {
+                $actions = '<a href="' . route('{{ modelVariable }}.edit', $record->id) . '" class="btn btn-primary btn-sm" title="edit"><i class="fa fa-edit"></i></a>';
+
+                if ($record->deleted_at) {
+                    $actions .= '<a href="' . route('{{ modelVariable }}.undo', $record->id) . '" class="btn btn-primary btn-sm">Restore</a>';
+                } else {
+                    $actions .= '<form action="' . route('{{ modelVariable }}.destroy', $record->id) . '" method="post" style="display: inline-block">
+                                            ' . csrf_field() . '
+                                            ' . method_field('DELETE') . '
+                                            <button type="submit" class="btn btn-danger btn-sm ms-1" title="delete">
+                                                <i class="fa fa-trash"></i>
+                                            </button>
+                                        </form>';
+                }
+                return $actions;
+            });
+    }
+}
