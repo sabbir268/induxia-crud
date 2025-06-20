@@ -351,7 +351,7 @@ PHP;
                 } else if ($details['input_type'] == 'file') {
                     $tableColumns[] = "'_$column' => '" . $label . "'";
                     $tableModifyData[] = "->modifyData('_$column', function (\$record) {
-                        return '<a href=\"' . \$record->$column->url . '\" target=\"_blank\">View</a>';
+                        return '<a href=\"#\" target=\"_blank\">View</a>';
                     })";
                 } else if ($details['type'] == 'boolean') {
                     $tableColumns[] = "'_$column' => '" . $label . "'";
@@ -555,14 +555,14 @@ HTML;
                                     <span class="text-danger">{{ \$errors->first('{$column}') }}</span>
                                 @endif
                             </div>
-                            @if (isset(\$data->{$column}) && \$data->{$column}->exists)
+                            @if (isset(\$data?->{$column}) && \$data?->{$column}?->exists)
                                 <div class="pb-2 mb-4 border-bottom">
                                     <button type="button" class="btn btn-sm btn-danger mb-2 delete-img" data-id="{{ \$data->id }}"
                                             data-model="{$name}" data-field="{$column}">
                                         <i class="fa fa-trash"></i> {{ __('pages.Delete') }}
                                     </button>
                                     <br>
-                                    <img src="{{ \$data->{$column}->url }}" alt="{{ \$data->{$column}->name }}"
+                                    <img src="{{ \$data?->{$column}?->url }}" alt="{{ \$data?->{$column}->name }}"
                                          style="height:250px;max-width: 100%;">
                                 </div>
                             @endif
